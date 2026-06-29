@@ -96,3 +96,128 @@ APP_TITLE = "语音记笔记"
 # ---- 网页版服务 ----
 WEB_HOST = os.environ.get("WEB_HOST", "127.0.0.1").strip()
 WEB_PORT = int(os.environ.get("WEB_PORT", "8000"))
+
+# ---- AI 问答 (支持多家, 均走 OpenAI 兼容接口) ----
+# 把记录到的问题发给大模型回答。支持 OpenAI / DeepSeek / Gemini, 配了谁的 Key 就能用谁。
+LLM_DEFAULT_PROVIDER = os.environ.get("LLM_PROVIDER", "openai").strip().lower()
+
+# 各家默认接入信息(base_url 均为 OpenAI 兼容的 /chat/completions 前缀)
+_LLM_PRESETS = {
+    "openai": {
+        "label": "OpenAI (ChatGPT)",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "key_env": "OPENAI_API_KEY",
+    },
+    "deepseek": {
+        "label": "DeepSeek",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat",
+        "key_env": "DEEPSEEK_API_KEY",
+    },
+    "gemini": {
+        "label": "Gemini",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-2.0-flash",
+        "key_env": "GEMINI_API_KEY",
+    },
+    "groq": {
+        "label": "Groq (Llama)",
+        "base_url": "https://api.groq.com/openai/v1",
+        "model": "llama-3.3-70b-versatile",
+        "key_env": "GROQ_API_KEY",
+    },
+}
+
+
+def _resolve_llm() -> dict:
+    """读取各家 Key/模型/base_url, 允许用 {PROVIDER}_MODEL / {PROVIDER}_BASE_URL 覆盖。"""
+    result = {}
+    for name, preset in _LLM_PRESETS.items():
+        up = name.upper()
+        result[name] = {
+            "label": preset["label"],
+            "base_url": os.environ.get(f"{up}_BASE_URL", "").strip() or preset["base_url"],
+            "model": os.environ.get(f"{up}_MODEL", "").strip() or preset["model"],
+            "key": os.environ.get(preset["key_env"], "").strip(),
+        }
+    return result
+
+
+LLM_CONFIG = _resolve_llm()
+
+
+# ---- 网页端配置(密钥) 持久化与热更新 ----
+# 安全说明:
+# - 密钥仅保存在服务器本地的 .env 文件(已被 .gitignore 忽略, 不会进 Git/不会上云)。
+# - 服务默认只监听 127.0.0.1(本机), 不对外网开放。
+# - 后端只会向前端返回"是否已配置 + 末 4 位掩码", 绝不回传明文。
+ENV_PATH = BASE_DIR / ".env"
+
+# 允许由网页端配置并写入 .env 的项(其余配置仍只读 .env/环境变量)。
+# 自动派生: Deepgram + 默认服务商 + 各家 LLM 的 Key 环境变量名。
+MANAGED_SECRETS = (
+    ("DEEPGRAM_API_KEY", "LLM_PROVIDER")
+    + tuple(p["key_env"] for p in _LLM_PRESETS.values())
+)
+
+
+def reload_secrets() -> None:
+    """根据当前环境变量重新计算与密钥相关的配置(供运行时热更新, 免重启)。"""
+    global DEEPGRAM_API_KEY, LLM_DEFAULT_PROVIDER, LLM_CONFIG
+    DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
+    LLM_DEFAULT_PROVIDER = os.environ.get("LLM_PROVIDER", "openai").strip().lower()
+    LLM_CONFIG = _resolve_llm()
+
+
+def _write_env_file(updates: dict) -> None:
+    """把 updates 写入 .env(存在则原地更新, 不存在则追加), 保留其余内容与注释。"""
+    lines = []
+    if ENV_PATH.exists():
+        lines = ENV_PATH.read_text(encoding="utf-8").splitlines()
+    remaining = dict(updates)
+    out = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in remaining:
+                out.append(f"{key}={remaining.pop(key)}")
+                continue
+        out.append(line)
+    for key, val in remaining.items():
+        out.append(f"{key}={val}")
+    ENV_PATH.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def apply_secrets(updates: dict) -> None:
+    """更新内存环境变量并持久化到 .env, 然后热重载相关配置。
+
+    @param updates 仅处理 MANAGED_SECRETS 中的键; 值为空字符串表示清除该项。
+    """
+    clean = {k: str(v).strip() for k, v in updates.items() if k in MANAGED_SECRETS}
+    if not clean:
+        return
+    for key, val in clean.items():
+        os.environ[key] = val
+    _write_env_file(clean)
+    reload_secrets()
+
+
+def _mask(value: str) -> str:
+    """把密钥转成掩码展示(只保留末 4 位), 绝不返回明文。"""
+    value = (value or "").strip()
+    if not value:
+        return ""
+    return "••••" + value[-4:] if len(value) > 4 else "•" * len(value)
+
+
+def secret_status() -> dict:
+    """返回各密钥的 是否已配置 + 掩码 (供前端展示, 不含明文) 以及默认服务商。"""
+    status: dict = {
+        "deepgram": {"ready": bool(DEEPGRAM_API_KEY), "masked": _mask(DEEPGRAM_API_KEY)},
+    }
+    for name, conf in LLM_CONFIG.items():
+        status[name] = {"ready": bool(conf["key"]), "masked": _mask(conf["key"])}
+    status["llm_default"] = LLM_DEFAULT_PROVIDER
+    return status

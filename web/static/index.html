@@ -66,46 +66,256 @@
     display: flex; align-items: center; gap: 10px;
     margin-top: 18px; flex-wrap: wrap;
   }
-  button, select {
+  button {
     font-family: inherit; font-size: 14px;
     border: none; border-radius: 10px; cursor: pointer;
     padding: 10px 16px; color: var(--text);
     background: rgba(255, 255, 255, 0.08);
     transition: background 0.15s ease;
   }
-  button:hover, select:hover { background: rgba(255, 255, 255, 0.14); }
+  button:hover { background: rgba(255, 255, 255, 0.14); }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   .record {
-    flex: 1; min-width: 160px;
+    width: 100%;
     background: var(--accent); font-weight: 700; font-size: 16px;
     padding: 14px;
   }
   .record:hover { background: #3f7ff5; }
   .record.on { background: var(--danger); }
   .record.on:hover { background: #f0584d; }
-  select { background: rgba(255, 255, 255, 0.08); }
+
+  /* 明显的下拉框：带边框、独立背景、自定义箭头 */
+  .options, .ai-bar { display: flex; align-items: flex-end; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field-label { font-size: 11px; color: var(--muted); padding-left: 2px; }
+  select {
+    font-family: inherit; font-size: 14px; cursor: pointer;
+    color: var(--text);
+    background-color: #2a2f3d;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 10px;
+    padding: 10px 36px 10px 12px;
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c7c9d1' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat: no-repeat; background-position: right 12px center;
+    min-width: 150px;
+  }
+  select:hover { border-color: rgba(255, 255, 255, 0.45); background-color: #313747; }
+  select:focus { outline: none; border-color: var(--accent); }
+  select:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .ask {
+    background: #19a06b; font-weight: 700; padding: 12px 18px; font-size: 15px;
+  }
+  .ask:hover { background: #1cb279; }
+
+  .answer {
+    margin-top: 14px;
+    background: rgba(47, 111, 237, 0.10);
+    border: 1px solid rgba(47, 111, 237, 0.35);
+    border-radius: 12px; padding: 14px;
+    font-size: 15px; line-height: 1.7;
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 40vh; overflow-y: auto;
+  }
+  .answer .ai-title { font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
   .hint { margin-top: 12px; font-size: 12px; color: var(--muted); }
+
+  .head-right { display: flex; align-items: center; gap: 12px; }
+  .icon-btn {
+    background: rgba(255, 255, 255, 0.08); border-radius: 10px;
+    padding: 7px 11px; font-size: 16px; line-height: 1;
+  }
+
+  /* 设置弹窗 */
+  .modal-mask {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
+    display: none; align-items: center; justify-content: center;
+    padding: 24px; z-index: 50;
+  }
+  .modal-mask.open { display: flex; }
+  .modal {
+    width: 100%; max-width: 520px;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; padding: 22px;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+    max-height: 86vh; overflow-y: auto;
+  }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .modal-head .title { font-size: 17px; }
+  .modal-sub { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 16px; }
+  .secure-note {
+    font-size: 12px; color: #8fd6b4; line-height: 1.6;
+    background: rgba(25, 160, 107, 0.12); border: 1px solid rgba(25, 160, 107, 0.3);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 16px;
+  }
+  .form-row { margin-bottom: 14px; }
+  .form-row label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .form-row .sub { font-size: 11px; color: var(--muted); font-weight: 400; }
+  .form-row .sub a { color: var(--accent); }
+  .pwd-wrap { display: flex; gap: 8px; align-items: center; }
+  .modal input[type="text"], .modal input[type="password"] {
+    flex: 1; width: 100%; font-family: inherit; font-size: 14px;
+    color: var(--text); background-color: #2a2f3d;
+    border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .modal input:focus { outline: none; border-color: var(--accent); }
+  .modal select {
+    width: 100%; background-color: #2a2f3d;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+  }
+  .toggle-eye { padding: 9px 11px; }
+  .key-state { font-size: 11px; margin-top: 5px; }
+  .key-state.ok { color: #34c759; }
+  .key-state.no { color: var(--muted); }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+  .btn-primary { background: var(--accent); font-weight: 700; }
+  .btn-primary:hover { background: #3f7ff5; }
+  .save-msg { font-size: 12px; margin-right: auto; align-self: center; }
+  .save-msg.ok { color: #34c759; }
+  .save-msg.err { color: var(--danger); }
 </style>
 </head>
 <body>
   <div class="card">
     <div class="head">
       <div class="title">语音记笔记</div>
-      <div class="status"><span class="dot" id="dot"></span><span id="statusText">待机</span></div>
+      <div class="head-right">
+        <div class="status"><span class="dot" id="dot"></span><span id="statusText">待机</span></div>
+        <button class="icon-btn" id="settingsBtn" title="API 配置">⚙</button>
+      </div>
     </div>
 
     <div class="transcript" id="transcript"><span class="placeholder">点击下方「开始录音」，说话即可实时转文字…</span></div>
 
     <div class="controls">
       <button class="record" id="recordBtn">开始录音</button>
-      <select id="engineSel" title="转录引擎">
-        <option value="deepgram">云端 Deepgram</option>
-        <option value="local">本地离线</option>
-      </select>
+    </div>
+
+    <div class="options">
+      <label class="field">
+        <span class="field-label">音频来源</span>
+        <select id="sourceSel" title="音频来源">
+          <option value="mic">🎙 麦克风</option>
+          <option value="system">🔊 电脑播放声音</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">转录引擎</span>
+        <select id="engineSel" title="转录引擎">
+          <option value="deepgram">☁ 云端 Deepgram</option>
+          <option value="local">💻 本地离线</option>
+        </select>
+      </label>
+      <div class="spacer"></div>
       <button id="copyBtn">复制</button>
       <button id="clearBtn">清空</button>
     </div>
+
+    <div class="ai-bar">
+      <button class="ask" id="askBtn">🤖 问 AI</button>
+      <label class="field">
+        <span class="field-label">AI 服务商</span>
+        <select id="providerSel" title="AI 服务商"></select>
+      </label>
+      <label class="field">
+        <span class="field-label">回答详略</span>
+        <select id="modeSel" title="回答详略">
+          <option value="concise">简略</option>
+          <option value="detailed">详细</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="answer" id="answer" style="display:none"></div>
     <div class="hint" id="hint"></div>
+  </div>
+
+  <div class="modal-mask" id="settingsMask">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="title">API 配置</div>
+        <button class="icon-btn" id="settingsClose" title="关闭">✕</button>
+      </div>
+      <div class="modal-sub">在这里填入各服务的 API Key，保存后立即生效（无需重启）。</div>
+      <div class="secure-note">
+        🔒 保密说明：密钥只保存在本机的 <code>.env</code> 文件中（已被 Git 忽略，不会上传），
+        服务仅监听本机 127.0.0.1。页面只显示末 4 位掩码，绝不回显完整密钥。
+      </div>
+
+      <div class="form-row">
+        <label>Deepgram API Key
+          <span class="sub">语音转录（云端）· <a href="https://console.deepgram.com/signup" target="_blank">申请</a></span>
+        </label>
+        <div class="pwd-wrap">
+          <input type="password" id="key_deepgram" autocomplete="off" placeholder="未配置" />
+          <button class="icon-btn toggle-eye" data-target="key_deepgram" title="显示/隐藏">👁</button>
+        </div>
+        <div class="key-state no" id="state_deepgram">未配置</div>
+      </div>
+
+      <div class="form-row">
+        <label>OpenAI API Key
+          <span class="sub">ChatGPT · <a href="https://platform.openai.com/api-keys" target="_blank">申请</a></span>
+        </label>
+        <div class="pwd-wrap">
+          <input type="password" id="key_openai" autocomplete="off" placeholder="未配置" />
+          <button class="icon-btn toggle-eye" data-target="key_openai" title="显示/隐藏">👁</button>
+        </div>
+        <div class="key-state no" id="state_openai">未配置</div>
+      </div>
+
+      <div class="form-row">
+        <label>DeepSeek API Key
+          <span class="sub"><a href="https://platform.deepseek.com/api_keys" target="_blank">申请</a></span>
+        </label>
+        <div class="pwd-wrap">
+          <input type="password" id="key_deepseek" autocomplete="off" placeholder="未配置" />
+          <button class="icon-btn toggle-eye" data-target="key_deepseek" title="显示/隐藏">👁</button>
+        </div>
+        <div class="key-state no" id="state_deepseek">未配置</div>
+      </div>
+
+      <div class="form-row">
+        <label>Gemini API Key
+          <span class="sub">Google · <a href="https://aistudio.google.com/apikey" target="_blank">申请</a></span>
+        </label>
+        <div class="pwd-wrap">
+          <input type="password" id="key_gemini" autocomplete="off" placeholder="未配置" />
+          <button class="icon-btn toggle-eye" data-target="key_gemini" title="显示/隐藏">👁</button>
+        </div>
+        <div class="key-state no" id="state_gemini">未配置</div>
+      </div>
+
+      <div class="form-row">
+        <label>Groq API Key
+          <span class="sub">免费/极快 · Llama 等 · <a href="https://console.groq.com/keys" target="_blank">申请</a></span>
+        </label>
+        <div class="pwd-wrap">
+          <input type="password" id="key_groq" autocomplete="off" placeholder="未配置" />
+          <button class="icon-btn toggle-eye" data-target="key_groq" title="显示/隐藏">👁</button>
+        </div>
+        <div class="key-state no" id="state_groq">未配置</div>
+      </div>
+
+      <div class="form-row">
+        <label>默认 AI 服务商</label>
+        <select id="defaultProvider">
+          <option value="openai">OpenAI (ChatGPT)</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="gemini">Gemini</option>
+          <option value="groq">Groq (Llama)</option>
+        </select>
+      </div>
+
+      <div class="modal-actions">
+        <span class="save-msg" id="saveMsg"></span>
+        <button id="settingsCancel">取消</button>
+        <button class="btn-primary" id="settingsSave">保存</button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -114,10 +324,22 @@ const els = {
   statusText: document.getElementById('statusText'),
   transcript: document.getElementById('transcript'),
   recordBtn: document.getElementById('recordBtn'),
+  sourceSel: document.getElementById('sourceSel'),
   engineSel: document.getElementById('engineSel'),
+  askBtn: document.getElementById('askBtn'),
+  providerSel: document.getElementById('providerSel'),
+  modeSel: document.getElementById('modeSel'),
+  answer: document.getElementById('answer'),
   copyBtn: document.getElementById('copyBtn'),
   clearBtn: document.getElementById('clearBtn'),
   hint: document.getElementById('hint'),
+  settingsBtn: document.getElementById('settingsBtn'),
+  settingsMask: document.getElementById('settingsMask'),
+  settingsClose: document.getElementById('settingsClose'),
+  settingsCancel: document.getElementById('settingsCancel'),
+  settingsSave: document.getElementById('settingsSave'),
+  defaultProvider: document.getElementById('defaultProvider'),
+  saveMsg: document.getElementById('saveMsg'),
 };
 
 let ws = null;
@@ -164,16 +386,44 @@ function floatToInt16(float32) {
   return out;
 }
 
+async function captureStream(sourceType) {
+  if (sourceType === 'system') {
+    // 捕获电脑播放的声音(标签/系统音频)。需在弹窗里勾选"分享音频/标签音频"。
+    const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    const audioTracks = display.getAudioTracks();
+    // 只需要音频，关掉视频轨
+    display.getVideoTracks().forEach(t => t.stop());
+    if (!audioTracks.length) {
+      throw new Error('NO_SYSTEM_AUDIO');
+    }
+    return new MediaStream(audioTracks);
+  }
+  // 默认：麦克风
+  return await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+  });
+}
+
 async function start() {
+  const sourceType = els.sourceSel.value;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-    });
+    stream = await captureStream(sourceType);
   } catch (e) {
-    setStatus('无法访问麦克风', 'err');
-    els.hint.textContent = '请在浏览器允许麦克风权限后重试。';
+    if (e && e.message === 'NO_SYSTEM_AUDIO') {
+      setStatus('未捕获到系统声音', 'err');
+      els.hint.textContent = '请在弹出的共享窗口里勾选「分享标签页音频 / 系统音频」后重试（Chrome/Edge 支持最好）。';
+    } else if (sourceType === 'system') {
+      setStatus('已取消共享', 'err');
+      els.hint.textContent = '需要选择一个标签页或屏幕并勾选音频，才能捕获电脑播放的声音。';
+    } else {
+      setStatus('无法访问麦克风', 'err');
+      els.hint.textContent = '请在浏览器允许麦克风权限后重试。';
+    }
     return;
   }
+
+  // 共享被用户从浏览器顶部「停止共享」时，自动停止录音
+  stream.getAudioTracks().forEach(t => { t.onended = () => { if (recording) stop(); }; });
 
   // 先建 AudioContext 以拿到真实采样率（常见 48000），随音频一起告知服务端
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -209,6 +459,7 @@ async function start() {
   els.recordBtn.textContent = '停止录音';
   els.recordBtn.classList.add('on');
   els.engineSel.disabled = true;
+  els.sourceSel.disabled = true;
 }
 
 function beginCapture() {
@@ -229,6 +480,7 @@ function stop() {
   els.recordBtn.textContent = '开始录音';
   els.recordBtn.classList.remove('on');
   els.engineSel.disabled = false;
+  els.sourceSel.disabled = false;
   setStatus('待机', null);
 
   if (processor) { processor.disconnect(); processor.onaudioprocess = null; processor = null; }
@@ -246,6 +498,44 @@ els.copyBtn.onclick = () => {
   setTimeout(() => els.hint.textContent = '', 1500);
 };
 els.clearBtn.onclick = () => { finals.length = 0; interim = ''; render(); };
+
+els.askBtn.onclick = async () => {
+  const question = (finals.join('\n').trim() || interim.trim());
+  if (!question) {
+    els.hint.textContent = '请先录入要提问的内容。';
+    return;
+  }
+  const mode = els.modeSel.value;
+  const provider = els.providerSel.value || 'openai';
+  const providerLabel = els.providerSel.options[els.providerSel.selectedIndex]?.dataset.label || provider;
+  els.answer.style.display = 'block';
+  els.answer.innerHTML = '<div class="ai-title">' + escapeHtml(providerLabel) + '</div><span class="placeholder">思考中…</span>';
+  els.askBtn.disabled = true;
+  const prevText = els.askBtn.textContent;
+  els.askBtn.textContent = '回答中…';
+  try {
+    const r = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, mode, provider }),
+    });
+    const data = await r.json();
+    if (data.error) {
+      els.answer.innerHTML = '<div class="ai-title">' + escapeHtml(providerLabel) + '</div>' +
+        '<span style="color:var(--danger)">' + escapeHtml(data.error) + '</span>';
+    } else {
+      els.answer.innerHTML = '<div class="ai-title">' + escapeHtml(providerLabel) + '（' +
+        (mode === 'detailed' ? '详细' : '简略') + '）</div>' + escapeHtml(data.answer || '');
+    }
+  } catch (e) {
+    els.answer.innerHTML = '<div class="ai-title">ChatGPT</div>' +
+      '<span style="color:var(--danger)">请求失败，请检查服务是否在运行。</span>';
+  } finally {
+    els.askBtn.disabled = false;
+    els.askBtn.textContent = prevText;
+    els.answer.scrollTop = 0;
+  }
+};
 els.engineSel.onchange = () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({
@@ -256,14 +546,110 @@ els.engineSel.onchange = () => {
   }
 };
 
-// 初始化：读取服务端配置
-fetch('/api/config').then(r => r.json()).then(cfg => {
+// 初始化：读取服务端配置（保存设置后会再次调用以刷新）
+async function loadConfig() {
+  let cfg;
+  try { cfg = await fetch('/api/config').then(r => r.json()); }
+  catch { return; }
   targetRate = cfg.sample_rate || 16000;
   els.engineSel.value = cfg.engine || 'deepgram';
+
+  // 填充 AI 服务商下拉：未配置 Key 的标注"未配置"
+  const providers = cfg.llm_providers || [];
+  els.providerSel.innerHTML = '';
+  providers.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.dataset.label = p.label;
+    opt.textContent = p.label + (p.ready ? '' : '（未配置）');
+    els.providerSel.appendChild(opt);
+  });
+  // 默认选中：优先 默认服务商(若就绪), 否则第一个就绪的
+  const ready = providers.filter(p => p.ready).map(p => p.id);
+  const preferred = ready.includes(cfg.llm_default) ? cfg.llm_default : (ready[0] || cfg.llm_default);
+  if (preferred) els.providerSel.value = preferred;
+
+  const hints = [];
   if (!cfg.deepgram_ready && cfg.engine === 'deepgram') {
-    els.hint.textContent = '提示：未检测到 Deepgram Key，可在 .env 配置，或切换到「本地离线」。';
+    hints.push('未检测到 Deepgram Key，可点右上角 ⚙ 配置，或切换到「本地离线」。');
   }
-}).catch(() => {});
+  if (ready.length === 0) {
+    hints.push('「问 AI」需先点右上角 ⚙ 配置至少一个 Key（OpenAI / DeepSeek / Gemini）。');
+  }
+  els.hint.textContent = hints.join(' ');
+}
+loadConfig();
+
+// ---- 设置面板：API 配置 ----
+const SETTINGS_FIELDS = ['deepgram', 'openai', 'deepseek', 'gemini', 'groq'];
+
+async function openSettings() {
+  els.saveMsg.textContent = '';
+  // 拉取掩码状态填充
+  try {
+    const s = await fetch('/api/settings').then(r => r.json());
+    SETTINGS_FIELDS.forEach(f => {
+      const input = document.getElementById('key_' + f);
+      const state = document.getElementById('state_' + f);
+      const info = s[f] || {};
+      input.value = '';
+      input.placeholder = info.ready ? (info.masked + '（已配置，留空则不修改）') : '未配置';
+      input.type = 'password';
+      state.textContent = info.ready ? ('已配置 ' + info.masked) : '未配置';
+      state.className = 'key-state ' + (info.ready ? 'ok' : 'no');
+    });
+    if (s.llm_default) els.defaultProvider.value = s.llm_default;
+  } catch {}
+  els.settingsMask.classList.add('open');
+}
+
+function closeSettings() { els.settingsMask.classList.remove('open'); }
+
+async function saveSettings() {
+  const payload = { llm_default: els.defaultProvider.value };
+  SETTINGS_FIELDS.forEach(f => {
+    const v = document.getElementById('key_' + f).value.trim();
+    if (v) payload[f] = v;  // 留空=不修改, 不发送
+  });
+  els.settingsSave.disabled = true;
+  els.saveMsg.textContent = '保存中…';
+  els.saveMsg.className = 'save-msg';
+  try {
+    const r = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      els.saveMsg.textContent = '已保存并生效 ✓';
+      els.saveMsg.className = 'save-msg ok';
+      await loadConfig();
+      setTimeout(closeSettings, 700);
+    } else {
+      els.saveMsg.textContent = data.error || '保存失败';
+      els.saveMsg.className = 'save-msg err';
+    }
+  } catch {
+    els.saveMsg.textContent = '请求失败，请检查服务是否在运行。';
+    els.saveMsg.className = 'save-msg err';
+  } finally {
+    els.settingsSave.disabled = false;
+  }
+}
+
+els.settingsBtn.onclick = openSettings;
+els.settingsClose.onclick = closeSettings;
+els.settingsCancel.onclick = closeSettings;
+els.settingsSave.onclick = saveSettings;
+els.settingsMask.addEventListener('click', (e) => { if (e.target === els.settingsMask) closeSettings(); });
+// 显示/隐藏密钥
+document.querySelectorAll('.toggle-eye').forEach(btn => {
+  btn.onclick = () => {
+    const input = document.getElementById(btn.dataset.target);
+    input.type = input.type === 'password' ? 'text' : 'password';
+  };
+});
 </script>
 </body>
 </html>

@@ -139,6 +139,38 @@ python -m web.server
 | `KEYTERMS` | 追加专业词汇，提升专有名词准确度（逗号分隔） | `KEYTERMS=Composer,LangChain,你的项目名` |
 | `DG_DIARIZE` | 是否区分说话人（标注「说话人1/2…」） | `DG_DIARIZE=true` |
 | `WEB_PORT` | 网页服务端口（默认 8000） | `WEB_PORT=8000` |
+| `LLM_PROVIDER` | 默认 AI 服务商：`openai`/`deepseek`/`gemini` | `LLM_PROVIDER=openai` |
+| `OPENAI_API_KEY` 等 | 各家 AI 的 Key（见下方） | 见下方说明 |
+
+### 问 AI（可选，支持 OpenAI / DeepSeek / Gemini）
+
+录完一段内容后，点页面上的「问 AI」把它作为问题发给大模型回答，可选「简略 / 详细」，
+并可在「AI 服务商」下拉里切换用哪家（你配了哪几家的 Key，就能选哪几家）。
+
+**推荐方式（网页配置）**：启动后点页面右上角 ⚙「API 配置」，直接填入各家 Key 并保存，
+**立即生效、无需重启**。密钥只会写入本机的 `.env`（已被 Git 忽略），页面只显示末 4 位掩码、
+绝不回显完整密钥，服务也只监听本机 127.0.0.1，安全可控。
+
+也可手动填入任意一家（或多家）的 Key 到 `.env`：
+
+```ini
+# 三选一或都填；默认用 LLM_PROVIDER 指定的那家
+OPENAI_API_KEY=你的OpenAI Key       # 申请 https://platform.openai.com/api-keys
+DEEPSEEK_API_KEY=你的DeepSeek Key    # 申请 https://platform.deepseek.com/api_keys
+GEMINI_API_KEY=你的Gemini Key        # 申请 https://aistudio.google.com/apikey
+GROQ_API_KEY=你的Groq Key            # 免费/极快, 申请 https://console.groq.com/keys
+```
+
+重启服务即可。未配置任何 Key 时该功能会提示你去配置，不影响转录功能。
+
+> 原理：DeepSeek、Gemini 都提供「OpenAI 兼容」接口，所以三家用同一套调用方式，随时可切换。
+
+### 音频来源：麦克风 / 电脑播放声音
+
+页面「音频来源」可切换：
+- **麦克风**：录你说的话。
+- **电脑播放声音**：转录电脑里正在播放的音频（视频、会议、直播等）。点开始后在弹窗里
+  选择标签页或屏幕，并**勾选「分享标签页音频 / 系统音频」**（Chrome / Edge 支持最好）。
 
 > 项目已内置了一批 计算机科学 / 软件设计 / AI 常用术语作为默认关键词，
 > 你在 `KEYTERMS` 里填的会和它们自动合并。
