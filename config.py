@@ -64,8 +64,28 @@ DEFAULT_KEYTERMS = [
     "refactoring", "technical debt", "CI/CD", "polymorphism",
     "encapsulation", "concurrency", "race condition", "time complexity",
     "binary tree", "hash map",
-    # --- 语言 / 框架 / 工具 ---
-    "TypeScript", "Rust", "Golang", "FastAPI", "React", "Node.js",
+    # --- 编程语言 ---
+    "TypeScript", "JavaScript", "Python", "Java", "Rust", "Golang",
+    "Kotlin", "Swift", "C++", "C#", "Scala", "Ruby", "PHP",
+    # --- 前端开发 ---
+    "React", "Vue", "Angular", "Svelte", "Next.js", "Nuxt",
+    "Node.js", "Deno", "Bun", "Tailwind", "Sass", "Webpack", "Vite",
+    "Babel", "ESLint", "Prettier", "Redux", "Zustand", "JSX",
+    "DOM", "CSS", "HTML", "SPA", "SSR", "hydration", "responsive design",
+    "accessibility", "npm", "pnpm", "Yarn",
+    # --- 后端开发 ---
+    "FastAPI", "Django", "Flask", "Express", "Spring Boot", "NestJS",
+    "Nginx", "RabbitMQ", "Elasticsearch", "ORM", "SQLAlchemy", "Prisma",
+    "REST API", "RPC", "load balancer", "rate limiting", "caching",
+    "message queue", "webhook", "cron job", "authentication",
+    "authorization", "session", "pagination",
+    # --- 云 / DevOps ---
+    "AWS", "GCP", "Azure", "Terraform", "Ansible", "Prometheus",
+    "Grafana", "Jenkins", "GitHub Actions", "Helm", "Istio",
+    "Lambda", "S3", "EC2", "DynamoDB", "observability", "Git",
+    # --- 数据库 / 大数据 ---
+    "MongoDB", "Cassandra", "MySQL", "SQLite", "Apache Spark", "Flink",
+    "ClickHouse", "Snowflake", "ETL", "sharding", "indexing", "replication",
 ]
 _env_keyterms = os.environ.get("KEYTERMS", "").strip()
 _extra_keyterms = [w.strip() for w in _env_keyterms.split(",") if w.strip()]
