@@ -1,0 +1,15 @@
+numpy>=1.24.0
+websockets>=12.0
+python-dotenv>=1.0.0
+
+# 网页版后端
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+
+# 桌面版(可选): 若只用网页版可不安装
+# sounddevice>=0.4.6
+# PySide6>=6.6.0
+# pynput>=1.7.6
+
+# 本地离线引擎(可选)。只用云端 Deepgram 时可不安装。
+# faster-whisper>=1.0.0

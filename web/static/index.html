@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>语音记笔记</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --muted: #8a8f9c;
+    --text: #f2f3f6;
+    --accent: #2f6fed;
+    --danger: #e0483d;
+    --line: rgba(255, 255, 255, 0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #1d2233, var(--bg));
+    color: var(--text);
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 640px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  }
+  .head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .title { font-size: 18px; font-weight: 700; }
+  .status {
+    font-size: 13px; color: var(--muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #6b6f7a;
+  }
+  .dot.live { background: #34c759; box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.18); }
+  .dot.err { background: var(--danger); }
+
+  .transcript {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    min-height: 220px; max-height: 50vh;
+    overflow-y: auto;
+    font-size: 17px; line-height: 1.7;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .transcript .line { padding: 2px 0; }
+  .transcript .line + .line { border-top: 1px solid rgba(255, 255, 255, 0.04); }
+  .transcript .interim { color: var(--muted); }
+  .placeholder { color: var(--muted); }
+
+  .controls {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 18px; flex-wrap: wrap;
+  }
+  button, select {
+    font-family: inherit; font-size: 14px;
+    border: none; border-radius: 10px; cursor: pointer;
+    padding: 10px 16px; color: var(--text);
+    background: rgba(255, 255, 255, 0.08);
+    transition: background 0.15s ease;
+  }
+  button:hover, select:hover { background: rgba(255, 255, 255, 0.14); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .record {
+    flex: 1; min-width: 160px;
+    background: var(--accent); font-weight: 700; font-size: 16px;
+    padding: 14px;
+  }
+  .record:hover { background: #3f7ff5; }
+  .record.on { background: var(--danger); }
+  .record.on:hover { background: #f0584d; }
+  select { background: rgba(255, 255, 255, 0.08); }
+  .hint { margin-top: 12px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <div class="title">语音记笔记</div>
+      <div class="status"><span class="dot" id="dot"></span><span id="statusText">待机</span></div>
+    </div>
+
+    <div class="transcript" id="transcript"><span class="placeholder">点击下方「开始录音」，说话即可实时转文字…</span></div>
+
+    <div class="controls">
+      <button class="record" id="recordBtn">开始录音</button>
+      <select id="engineSel" title="转录引擎">
+        <option value="deepgram">云端 Deepgram</option>
+        <option value="local">本地离线</option>
+      </select>
+      <button id="copyBtn">复制</button>
+      <button id="clearBtn">清空</button>
+    </div>
+    <div class="hint" id="hint"></div>
+  </div>
+
+<script>
+const els = {
+  dot: document.getElementById('dot'),
+  statusText: document.getElementById('statusText'),
+  transcript: document.getElementById('transcript'),
+  recordBtn: document.getElementById('recordBtn'),
+  engineSel: document.getElementById('engineSel'),
+  copyBtn: document.getElementById('copyBtn'),
+  clearBtn: document.getElementById('clearBtn'),
+  hint: document.getElementById('hint'),
+};
+
+let ws = null;
+let audioCtx = null;
+let processor = null;
+let source = null;
+let stream = null;
+let recording = false;
+let targetRate = 16000;
+
+const finals = [];
+let interim = '';
+
+function setStatus(text, kind) {
+  els.statusText.textContent = text;
+  els.dot.className = 'dot' + (kind ? ' ' + kind : '');
+}
+
+function render() {
+  if (!finals.length && !interim) {
+    els.transcript.innerHTML = '<span class="placeholder">点击下方「开始录音」，说话即可实时转文字…</span>';
+    return;
+  }
+  // 每句定稿独立成行（自动分行）；临时结果另起一行用灰色显示
+  const lines = finals.map(t => '<div class="line">' + escapeHtml(t) + '</div>');
+  if (interim) {
+    lines.push('<div class="line interim">' + escapeHtml(interim) + '</div>');
+  }
+  els.transcript.innerHTML = lines.join('');
+  els.transcript.scrollTop = els.transcript.scrollHeight;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ---- 音频处理：转 Int16（采样率保持原生，交给服务端/Deepgram 高质量重采样）----
+function floatToInt16(float32) {
+  const out = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) {
+    let s = Math.max(-1, Math.min(1, float32[i]));
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return out;
+}
+
+async function start() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+    });
+  } catch (e) {
+    setStatus('无法访问麦克风', 'err');
+    els.hint.textContent = '请在浏览器允许麦克风权限后重试。';
+    return;
+  }
+
+  // 先建 AudioContext 以拿到真实采样率（常见 48000），随音频一起告知服务端
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = () => {
+    setStatus('监听中', 'live');
+    ws.send(JSON.stringify({
+      action: 'engine',
+      engine: els.engineSel.value,
+      sample_rate: Math.round(audioCtx.sampleRate),
+    }));
+    beginCapture();
+  };
+  ws.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    if (msg.type === 'interim') { interim = msg.text; render(); }
+    else if (msg.type === 'final') { if (msg.text) finals.push(msg.text); interim = ''; render(); }
+    else if (msg.type === 'error') { setStatus(msg.text, 'err'); els.hint.textContent = msg.text; }
+    else if (msg.type === 'status') {
+      if (msg.text === 'connected') setStatus('已连接', 'live');
+      else if (msg.text === 'loading') setStatus('正在加载本地模型…', null);
+    }
+  };
+  ws.onerror = () => setStatus('连接错误', 'err');
+  ws.onclose = () => { if (recording) stop(); };
+
+  recording = true;
+  els.recordBtn.textContent = '停止录音';
+  els.recordBtn.classList.add('on');
+  els.engineSel.disabled = true;
+}
+
+function beginCapture() {
+  source = audioCtx.createMediaStreamSource(stream);
+  processor = audioCtx.createScriptProcessor(4096, 1, 1);
+  processor.onaudioprocess = (e) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const input = e.inputBuffer.getChannelData(0);
+    const pcm = floatToInt16(input);
+    ws.send(pcm.buffer);
+  };
+  source.connect(processor);
+  processor.connect(audioCtx.destination);
+}
+
+function stop() {
+  recording = false;
+  els.recordBtn.textContent = '开始录音';
+  els.recordBtn.classList.remove('on');
+  els.engineSel.disabled = false;
+  setStatus('待机', null);
+
+  if (processor) { processor.disconnect(); processor.onaudioprocess = null; processor = null; }
+  if (source) { source.disconnect(); source = null; }
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+  ws = null;
+}
+
+els.recordBtn.onclick = () => { recording ? stop() : start(); };
+els.copyBtn.onclick = () => {
+  navigator.clipboard.writeText(finals.join('\n'));
+  els.hint.textContent = '已复制到剪贴板';
+  setTimeout(() => els.hint.textContent = '', 1500);
+};
+els.clearBtn.onclick = () => { finals.length = 0; interim = ''; render(); };
+els.engineSel.onchange = () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      action: 'engine',
+      engine: els.engineSel.value,
+      sample_rate: audioCtx ? Math.round(audioCtx.sampleRate) : 16000,
+    }));
+  }
+};
+
+// 初始化：读取服务端配置
+fetch('/api/config').then(r => r.json()).then(cfg => {
+  targetRate = cfg.sample_rate || 16000;
+  els.engineSel.value = cfg.engine || 'deepgram';
+  if (!cfg.deepgram_ready && cfg.engine === 'deepgram') {
+    els.hint.textContent = '提示：未检测到 Deepgram Key，可在 .env 配置，或切换到「本地离线」。';
+  }
+}).catch(() => {});
+</script>
+</body>
+</html>
