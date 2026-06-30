@@ -219,11 +219,55 @@ class DeepgramTranscriber(Transcriber):
             return None
         return max(set(speakers), key=speakers.count)
 
+    @staticmethod
+    def _speaker_word_count(alt: dict, speaker: int) -> int:
+        """统计该片段里归属于某说话人的词数(用于稳定化判断)。"""
+        words = alt.get("words") or []
+        return sum(1 for w in words if w.get("speaker") == speaker)
+
     def _prefix(self, text: str, speaker: Optional[int]) -> str:
         """给文本加说话人前缀(仅在 diarize 且有说话人时)。"""
         if config.DG_DIARIZE and speaker is not None:
             return f"说话人{speaker + 1}：{text}"
         return text
+
+    # 句末标点后允许跟随的收尾字符(引号/括号)
+    _SENTENCE_TAIL = '"”’\')）】」』'
+
+    def _split_sentences(self, text: str) -> tuple[list[str], str]:
+        """
+        把文本切分为 已完成的句子列表 + 末尾未完成的残句。
+
+        只有"句末标点(可带收尾引号) + 空白或文本结尾"才算一句结束，
+        从而避免把 ``Node.js`` / ``3.14`` / ``U.S.`` 等中间的点号误判为断句。
+        中文等无空格语言里，标点后即视为句子边界。
+
+        @return (完整句子列表, 残余未完成文本)。
+        """
+        sentences: list[str] = []
+        start = 0
+        i = 0
+        n = len(text)
+        while i < n:
+            if text[i] in self._SENTENCE_END:
+                j = i + 1
+                while j < n and text[j] in self._SENTENCE_END:
+                    j += 1
+                while j < n and text[j] in self._SENTENCE_TAIL:
+                    j += 1
+                # 仅当到文本末尾、后跟空白、或标点本身是全角(中日韩)时, 才算边界
+                is_boundary = j >= n or text[j].isspace() or text[i] in "。？！…"
+                if is_boundary:
+                    sentence = text[start:j].strip()
+                    if sentence:
+                        sentences.append(sentence)
+                    while j < n and text[j].isspace():
+                        j += 1
+                    start = j
+                    i = j
+                    continue
+            i += 1
+        return sentences, text[start:].strip()
 
     def _handle_message(self, message: str) -> None:
         """
@@ -279,17 +323,29 @@ class DeepgramTranscriber(Transcriber):
             and speaker != self._cur_speaker
             and self._utterance
         ):
-            self._flush()
+            # 稳定化: 仅当新说话人在该片段里足够"主导"(>=2 词)才换人,
+            # 避免单个词被误判成另一个人导致编号来回抖动 / 频繁换行。
+            if self._speaker_word_count(alt, speaker) >= 2:
+                self._flush()
+            else:
+                speaker = self._cur_speaker  # 词数太少, 维持当前说话人
         if speaker is not None:
             self._cur_speaker = speaker
 
         self._utterance = (self._utterance + " " + transcript).strip()
 
-        ends_sentence = self._utterance[-1] in self._SENTENCE_END
-        if speech_final or ends_sentence:
+        # 关键改动：把已确认文本里"已完成的句子"立即逐句成行,
+        # 只把没说完的半句留在缓冲, 这样长语音也能边说边一句句出来。
+        sentences, remainder = self._split_sentences(self._utterance)
+        for sentence in sentences:
+            self._on_final(self._prefix(sentence, self._cur_speaker))
+        self._utterance = remainder
+
+        if speech_final:
+            # 检测到停顿: 把剩余的半句也定稿成一行
             self._flush()
         else:
-            # 已确认片段也以无前缀的预览形式展示, 定稿时再补说话人
+            # 残句以无前缀的灰色预览展示, 定稿时再补说话人
             self._on_interim(self._utterance)
 
     def _flush(self) -> None:

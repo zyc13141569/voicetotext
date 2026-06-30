@@ -61,6 +61,14 @@
   .transcript .line + .line { border-top: 1px solid rgba(255, 255, 255, 0.04); }
   .transcript .interim { color: var(--muted); }
   .placeholder { color: var(--muted); }
+  /* 说话人标签：不同人不同颜色，可点击改名 */
+  .spk {
+    display: inline-block; font-size: 12px; font-weight: 700;
+    padding: 1px 8px; border-radius: 999px; margin-right: 8px;
+    cursor: pointer; user-select: none; vertical-align: 1px;
+    border: 1px solid currentColor;
+  }
+  .spk:hover { filter: brightness(1.25); }
 
   .controls {
     display: flex; align-items: center; gap: 10px;
@@ -375,19 +383,59 @@ function setStatus(text, kind) {
   els.dot.className = 'dot' + (kind ? ' ' + kind : '');
 }
 
+// 说话人配色（按编号循环取用）+ 自定义名字（记在本地，刷新仍在）
+const SPK_COLORS = ['#5b9bff', '#ff8f5b', '#46c98b', '#c07bff', '#ffd24a', '#ff6b9d', '#3fd0d6'];
+let speakerNames = {};
+try { speakerNames = JSON.parse(localStorage.getItem('speakerNames') || '{}'); } catch {}
+
+// 解析定稿文本里的「说话人N：」前缀，返回 {num, name, color, text}
+function parseSpeaker(raw) {
+  const m = raw.match(/^说话人(\d+)：([\s\S]*)$/);
+  if (!m) return { num: null, text: raw };
+  const num = parseInt(m[1], 10);
+  return {
+    num,
+    name: speakerNames[num] || ('说话人' + num),
+    color: SPK_COLORS[(num - 1) % SPK_COLORS.length],
+    text: m[2],
+  };
+}
+
+function renameSpeaker(num) {
+  const cur = speakerNames[num] || ('说话人' + num);
+  const name = prompt('给「' + cur + '」改个名字：', cur);
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (trimmed) speakerNames[num] = trimmed; else delete speakerNames[num];
+  localStorage.setItem('speakerNames', JSON.stringify(speakerNames));
+  render();
+}
+
 function render() {
   if (!finals.length && !interim) {
     els.transcript.innerHTML = '<span class="placeholder">点击下方「开始录音」，说话即可实时转文字…</span>';
     return;
   }
-  // 每句定稿独立成行（自动分行）；临时结果另起一行用灰色显示
-  const lines = finals.map(t => '<div class="line">' + escapeHtml(t) + '</div>');
+  // 每句定稿独立成行；有说话人时显示彩色标签（可点击改名），临时结果灰色
+  const lines = finals.map(raw => {
+    const p = parseSpeaker(raw);
+    if (p.num === null) return '<div class="line">' + escapeHtml(p.text) + '</div>';
+    const badge = '<span class="spk" data-spk="' + p.num + '" style="color:' + p.color + '">'
+      + escapeHtml(p.name) + '</span>';
+    return '<div class="line">' + badge + escapeHtml(p.text) + '</div>';
+  });
   if (interim) {
     lines.push('<div class="line interim">' + escapeHtml(interim) + '</div>');
   }
   els.transcript.innerHTML = lines.join('');
   els.transcript.scrollTop = els.transcript.scrollHeight;
 }
+
+// 点击说话人标签改名（事件委托，适配 innerHTML 重渲染）
+els.transcript.onclick = (e) => {
+  const badge = e.target.closest('.spk');
+  if (badge) renameSpeaker(parseInt(badge.dataset.spk, 10));
+};
 
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -510,7 +558,12 @@ function stop() {
 
 els.recordBtn.onclick = () => { recording ? stop() : start(); };
 els.copyBtn.onclick = () => {
-  navigator.clipboard.writeText(finals.join('\n'));
+  // 复制时把「说话人N：」替换成自定义名字
+  const text = finals.map(raw => {
+    const p = parseSpeaker(raw);
+    return p.num === null ? p.text : (p.name + '：' + p.text);
+  }).join('\n');
+  navigator.clipboard.writeText(text);
   els.hint.textContent = '已复制到剪贴板';
   setTimeout(() => els.hint.textContent = '', 1500);
 };
