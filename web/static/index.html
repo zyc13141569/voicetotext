@@ -122,6 +122,17 @@
   .answer .ai-title { font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
   .hint { margin-top: 12px; font-size: 12px; color: var(--muted); }
 
+  /* 多轮对话线程 */
+  .turn { padding: 10px 0; }
+  .turn + .turn { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+  .turn .q {
+    font-size: 13px; color: #bcd0ff; font-weight: 600; margin-bottom: 6px;
+    display: flex; gap: 6px;
+  }
+  .turn .q::before { content: "🗣"; }
+  .turn .a { font-size: 15px; line-height: 1.7; }
+  .turn .a .who { font-size: 11px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+
   .head-right { display: flex; align-items: center; gap: 12px; }
   .icon-btn {
     background: rgba(255, 255, 255, 0.08); border-radius: 10px;
@@ -216,6 +227,7 @@
 
     <div class="ai-bar">
       <button class="ask" id="askBtn">🤖 问 AI</button>
+      <button id="newChatBtn" title="清空 AI 对话记忆，开始新一轮">🆕 新对话</button>
       <label class="field">
         <span class="field-label">AI 服务商</span>
         <select id="providerSel" title="AI 服务商"></select>
@@ -327,6 +339,7 @@ const els = {
   sourceSel: document.getElementById('sourceSel'),
   engineSel: document.getElementById('engineSel'),
   askBtn: document.getElementById('askBtn'),
+  newChatBtn: document.getElementById('newChatBtn'),
   providerSel: document.getElementById('providerSel'),
   modeSel: document.getElementById('modeSel'),
   answer: document.getElementById('answer'),
@@ -352,6 +365,10 @@ let targetRate = 16000;
 
 const finals = [];
 let interim = '';
+
+// 多轮对话记忆：chatHistory 存 {role, content}；lastAskedFinalCount 记录已提问到的位置
+let chatHistory = [];
+let lastAskedFinalCount = 0;
 
 function setStatus(text, kind) {
   els.statusText.textContent = text;
@@ -497,10 +514,37 @@ els.copyBtn.onclick = () => {
   els.hint.textContent = '已复制到剪贴板';
   setTimeout(() => els.hint.textContent = '', 1500);
 };
-els.clearBtn.onclick = () => { finals.length = 0; interim = ''; render(); };
+els.clearBtn.onclick = () => { finals.length = 0; interim = ''; lastAskedFinalCount = 0; render(); };
+
+// 渲染整段对话线程（含一条"待回答/出错"的临时项）
+function renderChat(pending) {
+  els.answer.style.display = 'block';
+  const turns = [];
+  for (let i = 0; i < chatHistory.length; i += 2) {
+    const q = chatHistory[i];
+    const a = chatHistory[i + 1];
+    let html = '<div class="turn">';
+    if (q) html += '<div class="q">' + escapeHtml(q.content) + '</div>';
+    if (a) html += '<div class="a">' + escapeHtml(a.content) + '</div>';
+    html += '</div>';
+    turns.push(html);
+  }
+  if (pending) {
+    let html = '<div class="turn"><div class="q">' + escapeHtml(pending.question) + '</div>';
+    html += '<div class="a"><div class="who">' + escapeHtml(pending.label) + '</div>' +
+      (pending.error
+        ? '<span style="color:var(--danger)">' + escapeHtml(pending.error) + '</span>'
+        : '<span class="placeholder">思考中…</span>') + '</div></div>';
+    turns.push(html);
+  }
+  els.answer.innerHTML = turns.join('');
+  els.answer.scrollTop = els.answer.scrollHeight;
+}
 
 els.askBtn.onclick = async () => {
-  const question = (finals.join('\n').trim() || interim.trim());
+  // 只取"上次提问之后"新增的内容作为本轮追问；没有新增时回退到全部内容
+  const fresh = finals.slice(lastAskedFinalCount).join('\n').trim();
+  const question = (fresh || interim.trim() || finals.join('\n').trim());
   if (!question) {
     els.hint.textContent = '请先录入要提问的内容。';
     return;
@@ -508,8 +552,7 @@ els.askBtn.onclick = async () => {
   const mode = els.modeSel.value;
   const provider = els.providerSel.value || 'openai';
   const providerLabel = els.providerSel.options[els.providerSel.selectedIndex]?.dataset.label || provider;
-  els.answer.style.display = 'block';
-  els.answer.innerHTML = '<div class="ai-title">' + escapeHtml(providerLabel) + '</div><span class="placeholder">思考中…</span>';
+  renderChat({ question, label: providerLabel });
   els.askBtn.disabled = true;
   const prevText = els.askBtn.textContent;
   els.askBtn.textContent = '回答中…';
@@ -517,24 +560,36 @@ els.askBtn.onclick = async () => {
     const r = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, mode, provider }),
+      body: JSON.stringify({ question, mode, provider, history: chatHistory }),
     });
     const data = await r.json();
     if (data.error) {
-      els.answer.innerHTML = '<div class="ai-title">' + escapeHtml(providerLabel) + '</div>' +
-        '<span style="color:var(--danger)">' + escapeHtml(data.error) + '</span>';
+      renderChat({ question, label: providerLabel, error: data.error });
     } else {
-      els.answer.innerHTML = '<div class="ai-title">' + escapeHtml(providerLabel) + '（' +
-        (mode === 'detailed' ? '详细' : '简略') + '）</div>' + escapeHtml(data.answer || '');
+      const label = providerLabel + '（' + (mode === 'detailed' ? '详细' : '简略') + '）';
+      chatHistory.push({ role: 'user', content: question });
+      chatHistory.push({ role: 'assistant', content: data.answer || '' });
+      lastAskedFinalCount = finals.length;  // 标记这些内容已提问
+      renderChat();
+      // 给最后一条答案补上服务商标注
+      const last = els.answer.querySelector('.turn:last-child .a');
+      if (last) last.insertAdjacentHTML('afterbegin', '<div class="who">' + escapeHtml(label) + '</div>');
     }
   } catch (e) {
-    els.answer.innerHTML = '<div class="ai-title">ChatGPT</div>' +
-      '<span style="color:var(--danger)">请求失败，请检查服务是否在运行。</span>';
+    renderChat({ question, label: providerLabel, error: '请求失败，请检查服务是否在运行。' });
   } finally {
     els.askBtn.disabled = false;
     els.askBtn.textContent = prevText;
-    els.answer.scrollTop = 0;
   }
+};
+
+els.newChatBtn.onclick = () => {
+  chatHistory = [];
+  lastAskedFinalCount = finals.length;  // 之后只提问新增内容
+  els.answer.style.display = 'none';
+  els.answer.innerHTML = '';
+  els.hint.textContent = '已开始新对话（AI 记忆已清空）。';
+  setTimeout(() => els.hint.textContent = '', 1800);
 };
 els.engineSel.onchange = () => {
   if (ws && ws.readyState === WebSocket.OPEN) {

@@ -101,13 +101,35 @@ def api_save_settings(payload: dict) -> dict:
     return {"ok": True, "status": config.secret_status()}
 
 
-def _call_llm(provider: str, question: str, mode: str) -> tuple[str | None, str | None]:
-    """
-    调用指定服务商的 OpenAI 兼容 Chat Completions 接口回答问题。
+# 单次请求携带的历史轮数上限(一问一答算 2 条), 防止上下文过长
+_MAX_HISTORY_MESSAGES = 20
 
-    @param provider "openai" / "deepseek" / "gemini"。
+
+def _sanitize_history(history: object) -> list[dict]:
+    """校验并裁剪前端传来的对话历史, 只保留合法的 user/assistant 文本消息。"""
+    if not isinstance(history, list):
+        return []
+    cleaned: list[dict] = []
+    for item in history:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+            cleaned.append({"role": role, "content": content})
+    return cleaned[-_MAX_HISTORY_MESSAGES:]
+
+
+def _call_llm(
+    provider: str, question: str, mode: str, history: list[dict] | None = None
+) -> tuple[str | None, str | None]:
+    """
+    调用指定服务商的 OpenAI 兼容 Chat Completions 接口回答问题(支持多轮上下文)。
+
+    @param provider "openai" / "deepseek" / "gemini" / "groq"。
     @param question 用户(转录得到)的问题。
     @param mode "detailed"=详细 / "concise"=简略。
+    @param history 之前的对话历史(user/assistant 交替), 用于连续追问。
     @return (answer, error)。成功时 error 为 None。
     """
     conf = config.LLM_CONFIG.get(provider)
@@ -122,14 +144,17 @@ def _call_llm(provider: str, question: str, mode: str) -> tuple[str | None, str 
         if mode == "detailed"
         else "请用简洁的方式回答，直接给出要点，不要冗长。"
     )
-    system_prompt = "你是一个乐于助人的助手。用与问题相同的语言回答。" + style
+    system_prompt = (
+        "你是一个乐于助人的助手。用与问题相同的语言回答。"
+        "这是一段连续对话，请结合上文理解用户的追问。" + style
+    )
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(history or [])
+    messages.append({"role": "user", "content": question})
     body = json.dumps(
         {
             "model": conf["model"],
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question},
-            ],
+            "messages": messages,
             "temperature": 0.5,
         }
     ).encode("utf-8")
@@ -154,13 +179,14 @@ def _call_llm(provider: str, question: str, mode: str) -> tuple[str | None, str 
 
 @app.post("/api/ask")
 def api_ask(payload: dict) -> dict:
-    """把问题发给所选 AI 服务商并返回回答。"""
+    """把问题发给所选 AI 服务商并返回回答(支持多轮上下文)。"""
     question = (payload.get("question") or "").strip()
     mode = payload.get("mode", "concise")
     provider = (payload.get("provider") or config.LLM_DEFAULT_PROVIDER).strip().lower()
+    history = _sanitize_history(payload.get("history"))
     if not question:
         return {"error": "问题为空，请先录入内容。"}
-    answer, error = _call_llm(provider, question, mode)
+    answer, error = _call_llm(provider, question, mode, history)
     if error:
         return {"error": error}
     return {"answer": answer, "provider": provider}
