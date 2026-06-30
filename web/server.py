@@ -277,11 +277,29 @@ async def ws_endpoint(ws: WebSocket) -> None:
         await sender_task
 
 
+def _maybe_open_browser(url: str) -> None:
+    """由 start.bat 设置 VTT_OPEN_BROWSER=1 时, 稍候自动打开浏览器。
+
+    延迟一点点等服务端口就绪, 避免浏览器先打开导致首次加载失败。
+    """
+    import os
+    import threading
+    import webbrowser
+
+    if os.environ.get("VTT_OPEN_BROWSER") != "1":
+        return
+    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+
+
 def main() -> None:
     """以 uvicorn 启动服务。"""
     import uvicorn
 
-    print(f"网页版已启动: http://{config.WEB_HOST}:{config.WEB_PORT}")
+    # 浏览器里用 localhost 访问; 监听地址若是 0.0.0.0 也回退到 localhost
+    host = "127.0.0.1" if config.WEB_HOST in ("0.0.0.0", "") else config.WEB_HOST
+    url = f"http://{host}:{config.WEB_PORT}"
+    print(f"网页版已启动: {url}")
+    _maybe_open_browser(url)
     uvicorn.run(app, host=config.WEB_HOST, port=config.WEB_PORT, log_level="info")
 
 
